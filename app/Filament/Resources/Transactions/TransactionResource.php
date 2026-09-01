@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\Transactions;
 
+use App\Exports\TransactionExport;
 use App\Filament\Resources\Transactions\Pages\CreateTransaction;
 use App\Filament\Resources\Transactions\Pages\EditTransaction;
 use App\Filament\Resources\Transactions\Pages\ListTransactions;
@@ -11,7 +12,6 @@ use Filament\Actions\DeleteAction;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
 use Filament\Forms\Components\DatePicker;
-use Filament\Forms\Components\Radio;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Textarea;
@@ -20,46 +20,50 @@ use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\Filter;
-use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
-use BackedEnum; // <-- tambahkan ini
+use BackedEnum;
+use Maatwebsite\Excel\Facades\Excel;
+use Filament\Actions\Action;
 
 class TransactionResource extends Resource
 {
     protected static ?string $model = Transaction::class;
 
-    // HAPUS properti $navigationIcon, ganti dengan method di bawah
-
     protected static ?string $navigationLabel = 'Pemasukan & Pengeluaran';
     protected static ?string $modelLabel = 'Transaksi';
 
-    // Method ini menggantikan properti $navigationIcon
     public static function getNavigationIcon(): BackedEnum|string|null
     {
-        return Heroicon::Banknotes; // atau 'heroicon-o-banknotes'
+        return Heroicon::Banknotes;
     }
 
     public static function form(Schema $schema): Schema
     {
         return $schema->components([
-            Radio::make('type')
-                ->label('Tipe')
-                ->options([
-                    'pemasukan' => 'Pemasukan',
-                    'pengeluaran' => 'Pengeluaran',
-                ])
-                ->inline()
-                ->required(),
+            TextInput::make('pemasukan')
+                ->label('Pemasukan')
+                ->numeric()
+                ->prefix('Rp')
+                ->nullable(),
+            TextInput::make('pengeluaran')
+                ->label('Pengeluaran')
+                ->numeric()
+                ->prefix('Rp')
+                ->nullable(),
             TextInput::make('title')
                 ->label('Judul')
                 ->required()
                 ->maxLength(255),
-            TextInput::make('amount')
-                ->label('Jumlah')
-                ->numeric()
-                ->prefix('Rp')
-                ->required(),
+            TextInput::make('pegangan')
+                ->label('Pegangan')
+                ->maxLength(255)
+                ->nullable(),
+            TextInput::make('save')
+                ->label('Save')
+                ->maxLength(255)
+                ->nullable()
+                ->helperText('Isi dengan keterangan simpanan / referensi'),
             DatePicker::make('date')
                 ->label('Tanggal')
                 ->required()
@@ -82,23 +86,26 @@ class TransactionResource extends Resource
                     ->label('Judul')
                     ->searchable()
                     ->description(fn (Transaction $record): ?string => $record->description),
-                TextColumn::make('type')
-                    ->label('Tipe')
-                    ->badge()
-                    ->color(fn (string $state): string => $state === 'pemasukan' ? 'success' : 'danger'),
-                TextColumn::make('amount')
-                    ->label('Jumlah')
+                TextColumn::make('pemasukan')
+                    ->label('Pemasukan')
                     ->money('IDR')
-                    ->sortable()
-                    ->color(fn (Transaction $record): string => $record->type === 'pemasukan' ? 'success' : 'danger'),
+                    ->default(0),
+                    TextColumn::make('pengeluaran')
+                    ->label('Pengeluaran')
+                    ->money('IDR')
+                    ->default(0),
+                    TextColumn::make('pegangan')
+                    ->label('Pegangan')
+                    ->money('IDR')
+                    ->searchable()
+                    ->toggleable(),
+                    TextColumn::make('save')
+                    ->label('Save')
+                    ->money('IDR')
+                    ->searchable()
+                    ->toggleable(),
             ])
             ->filters([
-                SelectFilter::make('type')
-                    ->label('Tipe')
-                    ->options([
-                        'pemasukan' => 'Pemasukan',
-                        'pengeluaran' => 'Pengeluaran',
-                    ]),
                 Filter::make('month')
                     ->schema([
                         Select::make('month')
@@ -122,6 +129,17 @@ class TransactionResource extends Resource
                 BulkActionGroup::make([
                     DeleteBulkAction::make(),
                 ]),
+            ])
+            ->headerActions([
+                Action::make('export')
+                    ->label('Export Excel')
+                    ->icon('heroicon-o-document-arrow-down')
+                    ->action(function () {
+                        $filters = [
+                            'month' => request()->input('tableFilters.month.month', null),
+                        ];
+                        return Excel::download(new TransactionExport($filters), 'transactions.xlsx');
+                    })
             ])
             ->defaultSort('date', 'desc');
     }

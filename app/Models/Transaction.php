@@ -7,15 +7,18 @@ use Illuminate\Database\Eloquent\Model;
 class Transaction extends Model
 {
     protected $fillable = [
-        'type',
         'title',
-        'amount',
+        'pemasukan',
+        'pengeluaran',
         'date',
         'description',
+        'pegangan',
+        'save',
     ];
 
     protected $casts = [
         'date' => 'date',
-        'amount' => 'integer',
+        'pemasukan' => 'integer',
+        'pengeluaran' => 'integer',
     ];
 }
